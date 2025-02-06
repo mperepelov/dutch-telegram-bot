@@ -42,7 +42,7 @@ Use 60% Dutch and 40% English to encourage immersion while keeping things unders
                 model='gpt-4o-mini',
                 messages=messages,
                 temperature=0.8,
-                max_tokens=300
+                max_tokens=150
             )
 
             ai_response = response.choices[0].message.content
