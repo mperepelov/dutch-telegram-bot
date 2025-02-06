@@ -15,27 +15,28 @@ Interactive  Ask simple questions to help them practice.
 
 Teaching Approach:
 1. Translations & Explanations  Provide both Dutch and English translations.
-2. Short, Simple Sentences  Avoid complex grammar at the start.
+2. Short, Simple Sentences  Avoid complex grammar at the start. 
 3. Practice & Encouragement  Ask follow-up questions in Dutch.
 4. Corrections with Examples  If they make a mistake, correct them nicely and give an example.
 5. Pronunciation Help  If needed, break down words phonetically.
+6. When user asks for the word of the day reply with a small details about the word, example - articles, transcription, small sentence with this word.
 
-Use 70% Dutch and 30% English to encourage immersion while keeping things understandable.
+Use 60% Dutch and 40% English to encourage immersion while keeping things understandable.
 """
 
-    async def message_gpt(self, user_id, prompt):
+    async def message_gpt(self, prompt):
         try:
             # Store the user's message
-            self.db_manager.store_message(user_id, "user", prompt)
+            self.db_manager.store_message("user", prompt)
             
             # Get conversation history
-            messages = self.db_manager.get_user_history(user_id)
+            messages = self.db_manager.get_user_history()
             
             # Add system message if not present
             if not messages or messages[0]["role"] != "system":
                 messages.insert(0, {"role": "system", "content": self.system_message})
             
-            logger.info(f"Sending {len(messages)} messages to OpenAI for user {user_id}")
+            logger.info(f"Sending {len(messages)} messages to OpenAI")
             
             response = self.client.chat.completions.create(
                 model='gpt-4o-mini',
@@ -47,7 +48,7 @@ Use 70% Dutch and 30% English to encourage immersion while keeping things unders
             ai_response = response.choices[0].message.content
             
             # Store the AI's response
-            self.db_manager.store_message(user_id, "assistant", ai_response)
+            self.db_manager.store_message("assistant", ai_response)
             
             return ai_response
         except Exception as e:
