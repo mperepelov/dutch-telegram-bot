@@ -11,6 +11,8 @@ load_dotenv(override=True)
 api_key = os.getenv('OPENAI_API_KEY')
 telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
 
+TELEGRAM_TIMEOUT = 30
+
 if not api_key:
     logger.error("No API key was found!")
 
@@ -28,11 +30,25 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     if update.message and update.message.text:
         try:
             user_message = update.message.text
+            # Get the AI response
             ai_response = await gpt_handler.message_gpt(user_message)
-            await update.message.reply_text(ai_response)
+            
+            await update.message.reply_text(
+                ai_response,
+                read_timeout=TELEGRAM_TIMEOUT,
+                write_timeout=TELEGRAM_TIMEOUT,
+                connect_timeout=TELEGRAM_TIMEOUT,
+                pool_timeout=TELEGRAM_TIMEOUT
+            )
         except Exception as e:
             logger.error(f"Error handling message: {e}")
-            await update.message.reply_text("Sorry, I encountered an error. Please try again.")
+            await update.message.reply_text(
+                "Sorry, I encountered an error. Please try again.",
+                read_timeout=TELEGRAM_TIMEOUT,
+                write_timeout=TELEGRAM_TIMEOUT,
+                connect_timeout=TELEGRAM_TIMEOUT,
+                pool_timeout=TELEGRAM_TIMEOUT
+            )
     else:
         logger.warning("Received a non-text message, ignoring.")
 
