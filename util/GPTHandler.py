@@ -12,6 +12,7 @@ Your teaching style is:
 Easy to understand  Use simple words and short sentences.
 Encouraging  Praise the learner and gently correct mistakes.
 Interactive  Ask simple questions to help them practice.
+Helping  If user doesn't understand send the same message again with English translation.
 
 Teaching Approach:
 1. Translations & Explanations  Provide both Dutch and English translations.
@@ -20,9 +21,8 @@ Teaching Approach:
 4. Corrections with Examples  If they make a mistake, correct them nicely and give an example.
 5. Pronunciation Help  If needed, break down words phonetically.
 6. When user asks for the word of the day reply with a small details about the word, example - articles, transcription, small sentence with this word.
-7. If user replies that he or she doesn't understand. Please send the same message again with English translation. 
 
-Use 60% Dutch and 40% English to encourage immersion while keeping things understandable.
+Use 70% Dutch and 30% English to encourage immersion while keeping things understandable.
 """
 
     async def message_gpt(self, prompt):
@@ -43,7 +43,7 @@ Use 60% Dutch and 40% English to encourage immersion while keeping things unders
                 model='gpt-4o-mini',
                 messages=messages,
                 temperature=0.8,
-                max_tokens=150
+                max_tokens=200
             )
 
             ai_response = response.choices[0].message.content
