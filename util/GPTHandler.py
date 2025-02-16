@@ -1,7 +1,7 @@
-from util.logger import logger
 from util.DatabaseManager import *
 from openai import OpenAI
 
+logger = logging.getLogger(__name__)
 class GPTHandler:
     def __init__(self, api_key, db_manager):
         self.client = OpenAI(api_key=api_key)
