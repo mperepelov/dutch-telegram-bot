@@ -1,8 +1,7 @@
 import sqlite3
-from util.logger import logger
 from datetime import datetime
 
-
+logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
