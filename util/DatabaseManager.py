@@ -24,6 +24,11 @@ class DatabaseManager:
         conn.close()
 
     def store_message(self, role, content):
+        # Skip storing if content contains "Dutch Word of the Day"
+        if "Dutch Word of the Day" in content:
+            logger.info("Skipping storage of daily word message")
+            return
+    
         try:
             conn = sqlite3.connect(self.db_name)
             c = conn.cursor()
