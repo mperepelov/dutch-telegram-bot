@@ -13,7 +13,7 @@ class DailyWordManager:
         self.db_name = 'chat_history.db'
 
     def init_db(self):
-        """Initialize database tables for storing chat IDs and daily words"""
+        """Initialize database table for storing chat IDs"""
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
         
@@ -24,22 +24,47 @@ class DailyWordManager:
                 is_active BOOLEAN DEFAULT TRUE
             )
         ''')
-        
-        # Create daily words table
+
+        # Create words history table
         c.execute('''
-            CREATE TABLE IF NOT EXISTS daily_words (
+            CREATE TABLE IF NOT EXISTS dutch_words (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                word TEXT NOT NULL,
+                word TEXT NOT NULL UNIQUE,
                 translation TEXT NOT NULL,
-                usage_example TEXT NOT NULL,
-                example_translation TEXT NOT NULL,
-                pronunciation TEXT NOT NULL,
                 date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        ''')
+        ''')        
         
         conn.commit()
         conn.close()
+
+    def get_used_words(self):
+        """Get list of previously used Dutch words"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            c = conn.cursor()
+            c.execute('SELECT word, translation FROM dutch_words ORDER BY date_added DESC')
+            words = c.fetchall()
+            conn.close()
+            return words
+        except sqlite3.Error as e:
+            logger.error(f"Error getting used words: {e}")
+            return []
+        
+    def store_word(self, word_data):
+        """Store new word in database"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO dutch_words (word, translation)
+                VALUES (?, ?)
+            ''', (word_data['word'], word_data['translation']))
+            conn.commit()
+            conn.close()
+            logger.info(f"Stored new word: {word_data['word']}")
+        except sqlite3.Error as e:
+            logger.error(f"Error storing word: {e}")
 
     def load_active_chats(self):
         """Load active chat IDs from database"""
@@ -61,51 +86,39 @@ class DailyWordManager:
         self.active_chats.add(chat_id)
         logger.info(f"Added chat {chat_id} to daily word list")
 
-    def get_existing_words(self):
-        """Get list of already used Dutch words"""
-        conn = sqlite3.connect(self.db_name)
-        c = conn.cursor()
-        c.execute('SELECT word FROM daily_words')
-        words = c.fetchall()
-        conn.close()
-        return [word[0] for word in words]
-
-    def store_daily_word(self, word_data):
-        """Store new daily word in database"""
-        conn = sqlite3.connect(self.db_name)
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO daily_words 
-            (word, translation, usage_example, example_translation, pronunciation)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (
-            word_data['word'],
-            word_data['translation'],
-            word_data['usage_example'],
-            word_data['example_translation'],
-            word_data['pronunciation']
-        ))
-        conn.commit()
-        conn.close()
-        logger.info(f"Stored new daily word: {word_data['word']}")
-
     def parse_word_response(self, response):
         """Parse GPT response into structured word data"""
+        word_data = {
+            'word': '',
+            'translation': '',
+            'usage_example': '',
+            'example_translation': '',
+            'pronunciation': ''
+        }
+    
         lines = response.strip().split('\n')
-        word_data = {}
-        
+        logger.debug(f"Parsing response: {response}")
+    
+        # Simple direct mapping as format is fixed
         for line in lines:
-            if ': ' in line:
-                key, value = line.split(': ', 1)
-                key = key.strip().lower().replace(' ', '_')
-                word_data[key] = value.strip()
-        
+            if line.startswith('Word: '):
+                word_data['word'] = line[6:].strip()
+            elif line.startswith('Translation: '):
+                word_data['translation'] = line[12:].strip()
+            elif line.startswith('Usage example: '):
+                word_data['usage_example'] = line[14:].strip()
+            elif line.startswith('Example translation: '):
+                word_data['example_translation'] = line[20:].strip()
+            elif line.startswith('Pronunciation tip: '):
+                word_data['pronunciation'] = line[18:].strip()
+    
         return word_data
 
     async def get_word_of_the_day(self):
         """Generate word of the day using GPT"""
-        existing_words = self.get_existing_words()
-        existing_words_str = ', '.join(existing_words)
+        # Get previously used words
+        used_words = self.get_used_words()
+        used_words_str = ', '.join([f"{word[0]} ({word[1]})" for word in used_words])
         
         prompt = f"""Generate a Dutch Word of the Day in the following format:
         Word: [Dutch word]
@@ -116,20 +129,28 @@ class DailyWordManager:
         
         Requirements:
         - Choose a commonly used word that would be useful for beginners
-        - The word must NOT be any of these already used words: {existing_words_str}
         - The word should be a single word (not a phrase)
         - Include clear phonetic pronunciation guidance
         - The example sentence should be simple and practical
+        - The word MUST NOT be any of these previously used words: {used_words_str}
         """
 
         try:
-            response = await self.gpt_handler.message_gpt(prompt)
+            logger.info("Requesting word of the day from GPT")
+            response = await self.gpt_handler.message_gpt(prompt, False)
+            logger.debug(f"Raw GPT response:\n{response}")
+
+            if not response or response == "Sorry, I encountered an error. Please try again.":
+                logger.error("Received error response from GPT handler")
+                raise ValueError("Invalid response from GPT")
+
+            logger.info("Parsing GPT response")
             word_data = self.parse_word_response(response)
-            
+            logger.debug(f"Parsed word data: {word_data}")
+
             # Store the new word
-            self.store_daily_word(word_data)
-            
-            # Format the response for sending
+            self.store_word(word_data)
+
             formatted_response = f"""🎯 Dutch Word of the Day:
 
 Word: {word_data['word']}
@@ -138,12 +159,14 @@ Usage example: {word_data['usage_example']}
 Example translation: {word_data['example_translation']}
 Pronunciation tip: {word_data['pronunciation']}"""
 
+            logger.info("Successfully generated word of the day")
             return formatted_response
             
         except Exception as e:
             logger.error(f"Error generating word of the day: {e}")
+            logger.error(f"Response from GPT: {response if 'response' in locals() else 'No response'}")
             return "Sorry, couldn't generate the Word of the Day. Please try again later."
-
+        
     async def broadcast_word(self, context):
         """Send word of the day to all active chats"""
         word_message = await self.get_word_of_the_day()

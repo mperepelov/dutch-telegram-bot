@@ -3,13 +3,15 @@ import pytz
 from telegram.ext import JobQueue
 from datetime import time
 from dotenv import load_dotenv
-from util.logger import logger
 from util.DatabaseManager import *
 from util.GPTHandler import *
 from util.DailyWordManager import *
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, JobQueue
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 api_key = os.getenv('OPENAI_API_KEY')
@@ -73,7 +75,7 @@ def setup_daily_word(application: Application):
     
     # Set timezone to Amsterdam (for Dutch time)
     amsterdam_tz = pytz.timezone('Europe/Amsterdam')
-    target_time = time(hour=12, minute=00, tzinfo=amsterdam_tz)
+    target_time = time(hour=9, minute=10, second=22, tzinfo=amsterdam_tz)
     
     job_queue.run_daily(
         daily_word_manager.broadcast_word,
