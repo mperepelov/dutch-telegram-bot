@@ -75,7 +75,7 @@ def setup_daily_word(application: Application):
     
     # Set timezone to Amsterdam (for Dutch time)
     amsterdam_tz = pytz.timezone('Europe/Amsterdam')
-    target_time = time(hour=9, minute=10, second=22, tzinfo=amsterdam_tz)
+    target_time = time(hour=12, minute=00, tzinfo=amsterdam_tz)
     
     job_queue.run_daily(
         daily_word_manager.broadcast_word,

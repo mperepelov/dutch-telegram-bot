@@ -43,7 +43,7 @@ class DailyWordManager:
         try:
             conn = sqlite3.connect(self.db_name)
             c = conn.cursor()
-            c.execute('SELECT word, translation FROM dutch_words ORDER BY date_added DESC')
+            c.execute('SELECT word, translation FROM dutch_words ORDER BY date_added DESC LIMIT 100')
             words = c.fetchall()
             conn.close()
             return words
