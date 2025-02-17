@@ -3,13 +3,15 @@ import pytz
 from telegram.ext import JobQueue
 from datetime import time
 from dotenv import load_dotenv
-from util.logger import logger
 from util.DatabaseManager import *
 from util.GPTHandler import *
 from util.DailyWordManager import *
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, JobQueue
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 api_key = os.getenv('OPENAI_API_KEY')

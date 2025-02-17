@@ -1,3 +1,4 @@
+import logging
 from util.DatabaseManager import *
 from openai import OpenAI
 
@@ -22,20 +23,35 @@ Word of the Day - When the user asks, provide the word, its article, pronunciati
 Use 70% Dutch and 30% English for immersion, but always translate if the user requests it. If they seem confused, offer extra help in English.
 """
 
-    async def message_gpt(self, prompt):
+    async def message_gpt(self, prompt, store_history=True):
         try:
-            # Store the user's message
-            self.db_manager.store_message("user", prompt)
-            
-            # Get conversation history
-            messages = self.db_manager.get_user_history()
-            
-            # Add system message if not present
-            if not messages or messages[0]["role"] != "system":
-                messages.insert(0, {"role": "system", "content": self.system_message})
-            
-            logger.info(f"Sending {len(messages)} messages to OpenAI")
-            
+            messages = []
+
+            if store_history:
+                # Store the user's message
+                self.db_manager.store_message("user", prompt)
+
+                # Get conversation history
+                messages = self.db_manager.get_user_history()
+                logger.info(f"Using conversation history with {len(messages)} messages")
+
+                # Add system message if not present
+                if not messages or messages[0]["role"] != "system":
+                    messages.insert(0, {"role": "system", "content": self.system_message})
+            else:
+                # Just use the current prompt without history
+                messages = [
+                    {
+                        "role": "system",
+                        "content": self.system_message
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+                logger.info("Using single message without history")
+
             response = self.client.chat.completions.create(
                 model='gpt-4o-mini',
                 messages=messages,
@@ -44,11 +60,13 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
             )
 
             ai_response = response.choices[0].message.content
-            
-            # Store the AI's response
-            self.db_manager.store_message("assistant", ai_response)
-            
+
+            if store_history:
+                # Store the AI's response only if we're using history
+                self.db_manager.store_message("assistant", ai_response)
+
             return ai_response
+
         except Exception as e:
             logger.error(f"Error in message_gpt: {e}")
             return "Sorry, I encountered an error. Please try again."
