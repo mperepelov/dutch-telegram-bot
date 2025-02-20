@@ -115,43 +115,50 @@ class DailyWordManager:
         return word_data
 
     async def get_word_of_the_day(self):
-        """Generate word of the day using GPT"""
-        # Get previously used words
-        used_words = self.get_used_words()
-        used_words_str = ', '.join([f"{word[0]} ({word[1]})" for word in used_words])
-        
-        prompt = f"""Generate a Dutch Word of the Day in the following format:
-        Word: [Dutch word]
-        Translation: [English translation]
-        Usage example: [Simple Dutch sentence]
-        Example translation: [English translation of the sentence]
-        Pronunciation tip: [Simple pronunciation guide]
-        
-        Requirements:
-        - Choose a commonly used word that would be useful for beginners
-        - The word should be a single word (not a phrase)
-        - Include clear phonetic pronunciation guidance
-        - The example sentence should be simple and practical
-        - The word MUST NOT be any of these previously used words: {used_words_str}
-        """
+        """Generate word of the day using GPT with retry logic for duplicates"""
+        max_retries = 3
+        current_try = 0
 
-        try:
-            logger.info("Requesting word of the day from GPT")
-            response = await self.gpt_handler.message_gpt(prompt, False)
-            logger.debug(f"Raw GPT response:\n{response}")
+        while current_try < max_retries:
+            try:
+                # Get previously used words
+                used_words = self.get_used_words()
+                used_words_str = ', '.join([f"{word[0]} ({word[1]})" for word in used_words])
 
-            if not response or response == "Sorry, I encountered an error. Please try again.":
-                logger.error("Received error response from GPT handler")
-                raise ValueError("Invalid response from GPT")
+                prompt = f"""Generate a Dutch Word of the Day in the following format:
+                Word: [Dutch word]
+                Translation: [English translation]
+                Usage example: [Simple Dutch sentence]
+                Example translation: [English translation of the sentence]
+                Pronunciation tip: [Simple pronunciation guide]
 
-            logger.info("Parsing GPT response")
-            word_data = self.parse_word_response(response)
-            logger.debug(f"Parsed word data: {word_data}")
+                Requirements:
+                - Choose a commonly used word that would be useful for beginners
+                - The word should be a single word (not a phrase)
+                - Include clear phonetic pronunciation guidance
+                - The example sentence should be simple and practical
+                - IMPORTANT: The word MUST NOT be any of these previously used words: {used_words_str}
+                - Generate a completely new word not in the above list
+                """
 
-            # Store the new word
-            self.store_word(word_data)
+                logger.info(f"Requesting word of the day from GPT (attempt {current_try + 1})")
+                response = await self.gpt_handler.message_gpt(prompt, False)
+                logger.debug(f"Raw GPT response:\n{response}")
 
-            formatted_response = f"""🎯 Dutch Word of the Day:
+                if not response or response == "Sorry, I encountered an error. Please try again.":
+                    logger.error("Received error response from GPT handler")
+                    raise ValueError("Invalid response from GPT")
+
+                logger.info("Parsing GPT response")
+                word_data = self.parse_word_response(response)
+                logger.debug(f"Parsed word data: {word_data}")
+
+                try:
+                    # Try to store the word
+                    self.store_word(word_data)
+
+                    # If storage succeeded, format and return the response
+                    formatted_response = f"""🎯 Dutch Word of the Day:
 
 Word: {word_data['word']}
 Translation: {word_data['translation']}
@@ -159,13 +166,25 @@ Usage example: {word_data['usage_example']}
 Example translation: {word_data['example_translation']}
 Pronunciation tip: {word_data['pronunciation']}"""
 
-            logger.info("Successfully generated word of the day")
-            return formatted_response
-            
-        except Exception as e:
-            logger.error(f"Error generating word of the day: {e}")
-            logger.error(f"Response from GPT: {response if 'response' in locals() else 'No response'}")
-            return "Sorry, couldn't generate the Word of the Day. Please try again later."
+                    logger.info("Successfully generated and stored word of the day")
+                    return formatted_response
+
+                except sqlite3.IntegrityError as e:
+                    logger.warning(f"Duplicate word found: {word_data['word']}, retrying...")
+                    current_try += 1
+                    if current_try >= max_retries:
+                        raise Exception("Max retries reached, unable to generate unique word")
+                    continue
+
+            except Exception as e:
+                logger.error(f"Error generating word of the day: {e}")
+                if 'response' in locals():
+                    logger.error(f"Response from GPT: {response}")
+                current_try += 1
+                if current_try >= max_retries:
+                    return "Sorry, couldn't generate the Word of the Day. Please try again later."
+
+        return "Sorry, couldn't generate a unique Word of the Day after multiple attempts. Please try again later."
         
     async def broadcast_word(self, context):
         """Send word of the day to all active chats"""
