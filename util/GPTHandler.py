@@ -56,7 +56,7 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
                 model='gpt-4o-mini',
                 messages=messages,
                 temperature=0.8,
-                max_tokens=200
+                max_tokens=1000
             )
 
             ai_response = response.choices[0].message.content
