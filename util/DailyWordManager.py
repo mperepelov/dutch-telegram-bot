@@ -1,6 +1,5 @@
 import logging
 from datetime import time, datetime
-import pytz
 import sqlite3
 
 logger = logging.getLogger(__name__)
@@ -125,21 +124,20 @@ class DailyWordManager:
                 used_words = self.get_used_words()
                 used_words_str = ', '.join([f"{word[0]} ({word[1]})" for word in used_words])
 
-                prompt = f"""Generate a Dutch Word of the Day in the following format:
-                Word: [Dutch word]
-                Translation: [English translation]
-                Usage example: [Simple Dutch sentence]
-                Example translation: [English translation of the sentence]
-                Pronunciation tip: [Simple pronunciation guide]
+                prompt = f"""Generate a Dutch Word of the Day using exactly this format:
+Word: [Dutch word]
+Translation: [English translation]
+Usage example: [Simple Dutch sentence]
+Example translation: [English translation of the sentence]
+Pronunciation tip: [Simple pronunciation guide]
 
-                Requirements:
-                - Choose a commonly used word that would be useful for beginners
-                - The word should be a single word (not a phrase)
-                - Include clear phonetic pronunciation guidance
-                - The example sentence should be simple and practical
-                - IMPORTANT: The word MUST NOT be any of these previously used words: {used_words_str}
-                - Generate a completely new word not in the above list
-                """
+Requirements:
+- Choose a commonly used word that would be useful for beginners
+- The word must be a single word (not a phrase)
+- Include clear phonetic pronunciation guidance
+- The example sentence should be simple and practical
+- Do not include any additional text or explanations
+- IMPORTANT: The word MUST NOT be any of these previously used words: {used_words_str}"""
 
                 logger.info(f"Requesting word of the day from GPT (attempt {current_try + 1})")
                 response = await self.gpt_handler.message_gpt(prompt, False)

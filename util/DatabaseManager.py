@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     def __init__(self):
         self.db_name = 'chat_history.db'
-        self.message_history_limit = 20
+        self.message_history_limit = 40
 
     def init_db(self):
         conn = sqlite3.connect(self.db_name)
