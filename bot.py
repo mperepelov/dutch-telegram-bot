@@ -81,10 +81,15 @@ def get_model_selection_keyboard():
         ))
     keyboard.append(advanced_claude_row)
     
-    # Word of the day settings row
+    # Word of the day options row
     keyboard.append([
-        InlineKeyboardButton("📅 Subscribe to Word of the Day", callback_data="wotd_subscribe"),
-        InlineKeyboardButton("🚫 Unsubscribe from Word of the Day", callback_data="wotd_unsubscribe")
+        InlineKeyboardButton("📋 Get Word of the Day", callback_data="wotd_get"),
+        InlineKeyboardButton("📅 Subscribe to Daily Words", callback_data="wotd_subscribe")
+    ])
+    
+    # Unsubscribe option
+    keyboard.append([
+        InlineKeyboardButton("🚫 Unsubscribe from Daily Words", callback_data="wotd_unsubscribe")
     ])
     
     return InlineKeyboardMarkup(keyboard)
@@ -171,46 +176,6 @@ async def settings_command(update: Update, context: CallbackContext) -> None:
         write_timeout=TELEGRAM_TIMEOUT
     )
 
-async def button_callback(update: Update, context: CallbackContext) -> None:
-    """Handle button clicks from inline keyboards"""
-    query = update.callback_query
-    chat_id = update.effective_chat.id
-    
-    # Call answer to remove the loading state of the button
-    await query.answer()
-    
-    if query.data.startswith("model_"):
-        # Extract model name from callback data
-        selected_model = query.data.replace("model_", "")
-        
-        # Store user's model preference
-        user_model_preferences[chat_id] = selected_model
-        
-        # Confirm selection to user
-        await query.edit_message_text(
-            f"Model changed to: {AVAILABLE_MODELS[selected_model]}\n\nYou can change it anytime with /settings",
-            read_timeout=TELEGRAM_TIMEOUT,
-            write_timeout=TELEGRAM_TIMEOUT
-        )
-        
-    elif query.data == "wotd_subscribe":
-        # Subscribe to Word of the Day
-        daily_word_manager.add_chat(chat_id)
-        await query.edit_message_text(
-            "You've subscribed to the Dutch Word of the Day! You'll receive a new word daily at 12:00 PM Amsterdam time.",
-            read_timeout=TELEGRAM_TIMEOUT,
-            write_timeout=TELEGRAM_TIMEOUT
-        )
-        
-    elif query.data == "wotd_unsubscribe":
-        # Unsubscribe from Word of the Day
-        daily_word_manager.remove_chat(chat_id)
-        await query.edit_message_text(
-            "You've unsubscribed from the Dutch Word of the Day. You can resubscribe anytime with /settings",
-            read_timeout=TELEGRAM_TIMEOUT,
-            write_timeout=TELEGRAM_TIMEOUT
-        )
-
 async def word_command(update: Update, context: CallbackContext) -> None:
     """Generate and send a word of the day on demand"""
     chat_id = update.effective_chat.id
@@ -237,6 +202,83 @@ async def word_command(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error generating word of the day: {e}")
         await update.message.reply_text(
             "Sorry, I encountered an error generating the word of the day. Please try again.",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+
+async def button_callback(update: Update, context: CallbackContext) -> None:
+    """Handle button clicks from inline keyboards"""
+    query = update.callback_query
+    chat_id = update.effective_chat.id
+    
+    # Call answer to remove the loading state of the button
+    await query.answer()
+    
+    if query.data.startswith("model_"):
+        # Extract model name from callback data
+        selected_model = query.data.replace("model_", "")
+        
+        # Store user's model preference
+        user_model_preferences[chat_id] = selected_model
+        
+        # Confirm selection to user
+        await query.edit_message_text(
+            f"Model changed to: {AVAILABLE_MODELS[selected_model]}\n\nYou can change it anytime with /settings",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        
+    elif query.data == "wotd_get":
+        # Show loading indicator
+        await context.bot.send_chat_action(
+            chat_id=chat_id,
+            action="typing"
+        )
+        
+        # Get user's preferred model
+        model_name = user_model_preferences.get(chat_id, DEFAULT_MODEL)
+        
+        try:
+            # Generate word of the day on demand
+            word_message = await daily_word_manager.get_word_of_the_day(model_name)
+            
+            # Can't edit the button message to include the word (too large),
+            # so we'll send a new message
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=word_message,
+                read_timeout=TELEGRAM_TIMEOUT,
+                write_timeout=TELEGRAM_TIMEOUT
+            )
+            
+            # Let user know word was generated
+            await query.edit_message_text(
+                f"Generated Word of the Day using {AVAILABLE_MODELS[model_name]}",
+                read_timeout=TELEGRAM_TIMEOUT,
+                write_timeout=TELEGRAM_TIMEOUT
+            )
+        except Exception as e:
+            logger.error(f"Error generating word of the day: {e}")
+            await query.edit_message_text(
+                "Sorry, I encountered an error generating the word of the day. Please try again.",
+                read_timeout=TELEGRAM_TIMEOUT,
+                write_timeout=TELEGRAM_TIMEOUT
+            )
+            
+    elif query.data == "wotd_subscribe":
+        # Subscribe to Word of the Day
+        daily_word_manager.add_chat(chat_id)
+        await query.edit_message_text(
+            "You've subscribed to the Dutch Word of the Day! You'll receive a new word daily at 12:00 PM Amsterdam time.\n\nYou can also get a word anytime with the /word command.",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        
+    elif query.data == "wotd_unsubscribe":
+        # Unsubscribe from Word of the Day
+        daily_word_manager.remove_chat(chat_id)
+        await query.edit_message_text(
+            "You've unsubscribed from the Dutch Word of the Day. You can resubscribe anytime with /settings",
             read_timeout=TELEGRAM_TIMEOUT,
             write_timeout=TELEGRAM_TIMEOUT
         )
