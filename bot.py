@@ -4,7 +4,7 @@ from telegram.ext import JobQueue
 from datetime import time
 from dotenv import load_dotenv
 from util.DatabaseManager import *
-from util.GPTHandler import *
+from util.LLMHandler import *
 from util.DailyWordManager import *
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, JobQueue
@@ -14,17 +14,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
-api_key = os.getenv('OPENAI_API_KEY')
+openai_api_key = os.getenv('OPENAI_API_KEY')
+anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
 telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
 daily_word_manager = None
 
 TELEGRAM_TIMEOUT = 30
 
-if not api_key:
-    logger.error("No API key was found!")
+if not openai_api_key:
+    logger.error("No OpenAI API key was found!")
+elif not anthropic_api_key:
+    logger.error("No Anthropic API key was found!")
 
 db_manager = DatabaseManager()
-gpt_handler = GPTHandler(api_key, db_manager)
+llm_handler = LanguageModelHandler(
+    openai_api_key=openai_api_key,
+    anthropic_api_key=anthropic_api_key,
+    db_manager=db_manager
+)
 
 async def start(update: Update, context: CallbackContext) -> None:
     welcome_message = "Hello! I'm your AI Language Tutor 🤖. Ask me anything!"
@@ -36,14 +43,15 @@ async def start(update: Update, context: CallbackContext) -> None:
 
     # Store the system message if it's not already there
     if not db_manager.get_user_history():
-        db_manager.store_message("system", gpt_handler.system_message)
+        db_manager.store_message("system", llm_handler
+    .system_message)
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     if update.message and update.message.text:
         try:
             user_message = update.message.text
             # Get the AI response
-            ai_response = await gpt_handler.message_gpt(user_message)
+            ai_response = await llm_handler.send_message(user_message, model_name="claude-3.7-sonnet")
             
             await update.message.reply_text(
                 ai_response,
@@ -66,7 +74,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
 def setup_daily_word(application: Application):
     global daily_word_manager
-    daily_word_manager = DailyWordManager(gpt_handler, application.bot)
+    daily_word_manager = DailyWordManager(llm_handler
+, application.bot)
     daily_word_manager.init_db()
     daily_word_manager.load_active_chats()
 
