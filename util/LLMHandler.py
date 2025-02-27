@@ -30,12 +30,12 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
             "gpt-4o-mini": {
                 "provider": "openai",
                 "temperature": 0.8,
-                "max_tokens": 1000
+                "max_tokens": 2000
             },
             "gpt-4o": {
                 "provider": "openai",
                 "temperature": 0.7,
-                "max_tokens": 1500
+                "max_tokens": 2000
             },
             "gpt-4-turbo": {
                 "provider": "openai",
@@ -51,13 +51,13 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
             "claude-3-sonnet": {
                 "provider": "anthropic",
                 "temperature": 0.7,
-                "max_tokens": 1500,
+                "max_tokens": 2000,
                 "api_model": "claude-3-sonnet-20240229"  # Specific API model name
             },
             "claude-3.5-sonnet": {
                 "provider": "anthropic",
                 "temperature": 0.7,
-                "max_tokens": 1500,
+                "max_tokens": 2000,
                 "api_model": "claude-3-5-sonnet-20240620"  # Specific API model name
             },
             "claude-3.7-sonnet": {
