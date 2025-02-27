@@ -5,8 +5,8 @@ import sqlite3
 logger = logging.getLogger(__name__)
 
 class DailyWordManager:
-    def __init__(self, gpt_handler, bot):
-        self.gpt_handler = gpt_handler
+    def __init__(self, llm_handler, bot):
+        self.llm_handler = llm_handler
         self.bot = bot
         self.active_chats = set()
         self.db_name = 'chat_history.db'
@@ -140,7 +140,7 @@ Requirements:
 - IMPORTANT: The word MUST NOT be any of these previously used words: {used_words_str}"""
 
                 logger.info(f"Requesting word of the day from GPT (attempt {current_try + 1})")
-                response = await self.gpt_handler.message_gpt(prompt, False)
+                response = await self.llm_handler.send_message(prompt, False)
                 logger.debug(f"Raw GPT response:\n{response}")
 
                 if not response or response == "Sorry, I encountered an error. Please try again.":

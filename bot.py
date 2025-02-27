@@ -74,8 +74,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
 def setup_daily_word(application: Application):
     global daily_word_manager
-    daily_word_manager = DailyWordManager(llm_handler
-, application.bot)
+    daily_word_manager = DailyWordManager(llm_handler, application.bot)
     daily_word_manager.init_db()
     daily_word_manager.load_active_chats()
 
