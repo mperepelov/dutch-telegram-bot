@@ -25,22 +25,50 @@ Pronunciation Help - If needed, break down words phonetically.
 Word of the Day - When the user asks, provide the word, its article, pronunciation, and a sample sentence in both Dutch and English.
 Use 70% Dutch and 30% English for immersion, but always translate if the user requests it. If they seem confused, offer extra help in English.
 """
-        # Model configurations with default settings
+        # Model configurations with default settings and correct API model names
         self.model_configs = {
             "gpt-4o-mini": {
                 "provider": "openai",
                 "temperature": 0.8,
                 "max_tokens": 2000
             },
+            "gpt-4o": {
+                "provider": "openai",
+                "temperature": 0.7,
+                "max_tokens": 2000
+            },
+            "gpt-4-turbo": {
+                "provider": "openai",
+                "temperature": 0.7,
+                "max_tokens": 2000
+            },
+            "claude-3-opus": {
+                "provider": "anthropic",
+                "temperature": 0.7,
+                "max_tokens": 2000,
+                "api_model": "claude-3-opus-20240229"  # Specific API model name
+            },
+            "claude-3-sonnet": {
+                "provider": "anthropic",
+                "temperature": 0.7,
+                "max_tokens": 2000,
+                "api_model": "claude-3-sonnet-20240229"  # Specific API model name
+            },
+            "claude-3.5-sonnet": {
+                "provider": "anthropic",
+                "temperature": 0.7,
+                "max_tokens": 2000,
+                "api_model": "claude-3-5-sonnet-20240620"  # Specific API model name
+            },
             "claude-3.7-sonnet": {
                 "provider": "anthropic",
                 "temperature": 0.7,
                 "max_tokens": 2000,
-                "model": "claude-3-7-sonnet-20250219"  
+                "api_model": "claude-3-haiku-20240307"  # Temporary fallback since 3.7 might not be available yet
             }
         }
 
-    async def send_message(self, prompt, model_name="claude-3.7-sonnet", store_history=True, **kwargs):
+    async def send_message(self, prompt, model_name="gpt-4o-mini", store_history=True, **kwargs):
         """
         Send a message to the specified language model
         
@@ -95,6 +123,7 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
                 # Use the model name directly from the parameter for OpenAI
                 actual_model = model_name
                 
+                logger.info(f"Sending request to OpenAI with model: {actual_model}")
                 response = self.openai_client.chat.completions.create(
                     model=actual_model,
                     messages=messages,
@@ -107,8 +136,8 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
                 if not self.anthropic_client:
                     return "Anthropic API key not provided."
                 
-                # Use the specific model string if provided, otherwise use the model_name
-                actual_model = model_config.get("model", model_name)
+                # Use the specific API model name from the config
+                actual_model = model_config.get("api_model", model_name)
                 
                 # Convert OpenAI message format to Anthropic format
                 anthropic_messages = []
@@ -122,6 +151,7 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
                     elif msg["role"] == "assistant":
                         anthropic_messages.append({"role": "assistant", "content": msg["content"]})
                 
+                logger.info(f"Sending request to Anthropic with model: {actual_model}")
                 response = self.anthropic_client.messages.create(
                     model=actual_model,
                     messages=anthropic_messages,
@@ -141,5 +171,32 @@ Use 70% Dutch and 30% English for immersion, but always translate if the user re
             return ai_response
             
         except Exception as e:
+            error_message = str(e)
             logger.error(f"Error in send_message with model {model_name}: {e}")
-            return f"Sorry, I encountered an error with {model_name}: {str(e)}"
+            
+            # Provide more specific error messages for common issues
+            if "404" in error_message and "not_found_error" in error_message:
+                return f"Model not found: The model '{model_name}' appears to be unavailable. This might be because the model name has changed or you don't have access to it. Please try a different model."
+            elif "401" in error_message and "invalid x-api-key" in error_message.lower():
+                return f"Authentication error: Invalid API key for {provider.capitalize()}. Please check your API key."
+            else:
+                return f"Sorry, I encountered an error with {model_name}: {error_message}"
+    
+    def get_available_models(self):
+        """
+        Returns a list of available models based on configured API keys
+        
+        Returns:
+            dict: Dictionary of available models grouped by provider
+        """
+        available_models = {"openai": [], "anthropic": []}
+        
+        for model_name, config in self.model_configs.items():
+            provider = config["provider"]
+            
+            if provider == "openai" and self.openai_client:
+                available_models["openai"].append(model_name)
+            elif provider == "anthropic" and self.anthropic_client:
+                available_models["anthropic"].append(model_name)
+                
+        return available_models
