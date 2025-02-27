@@ -5,11 +5,12 @@ import sqlite3
 logger = logging.getLogger(__name__)
 
 class DailyWordManager:
-    def __init__(self, llm_handler, bot):
+    def __init__(self, llm_handler, bot, model_name="gpt-4o-mini"):
         self.llm_handler = llm_handler
         self.bot = bot
         self.active_chats = set()
         self.db_name = 'chat_history.db'
+        self.model_name = model_name
 
     def init_db(self):
         """Initialize database table for storing chat IDs"""
@@ -113,10 +114,12 @@ class DailyWordManager:
     
         return word_data
 
-    async def get_word_of_the_day(self):
+    async def get_word_of_the_day(self, model_name=None):
         """Generate word of the day using GPT with retry logic for duplicates"""
         max_retries = 3
         current_try = 0
+        
+        model = model_name or self.model_name
 
         while current_try < max_retries:
             try:
@@ -140,7 +143,11 @@ Requirements:
 - IMPORTANT: The word MUST NOT be any of these previously used words: {used_words_str}"""
 
                 logger.info(f"Requesting word of the day from GPT (attempt {current_try + 1})")
-                response = await self.llm_handler.send_message(prompt, False)
+                response = await self.llm_handler.send_message(
+                    prompt=prompt,
+                    model_name=model,
+                    store_history=False
+                )
                 logger.debug(f"Raw GPT response:\n{response}")
 
                 if not response or response == "Sorry, I encountered an error. Please try again.":
@@ -184,9 +191,9 @@ Pronunciation tip: {word_data['pronunciation']}"""
 
         return "Sorry, couldn't generate a unique Word of the Day after multiple attempts. Please try again later."
         
-    async def broadcast_word(self, context):
+    async def broadcast_word(self, context, model_name=None):
         """Send word of the day to all active chats"""
-        word_message = await self.get_word_of_the_day()
+        word_message = await self.get_word_of_the_day(model_name)
         
         for chat_id in self.active_chats:
             try:
