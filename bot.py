@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from util.DatabaseManager import *
 from util.LLMHandler import *
 from util.DailyWordManager import *
+from util.DalleStoryGenerator import DalleStoryGenerator
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, JobQueue, CallbackQueryHandler
 import logging
@@ -18,6 +19,7 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
 telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
 daily_word_manager = None
+story_generator = None
 
 TELEGRAM_TIMEOUT = 30
 
@@ -126,6 +128,16 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             chat_id = update.effective_chat.id
             user_message = update.message.text
             
+            # Check if waiting for story prompt
+            if context.user_data.get('waiting_for_story_prompt', False):
+                # Clear the waiting state
+                context.user_data['waiting_for_story_prompt'] = False
+                
+                # Process as story prompt
+                await generate_story_flow(update, context, user_message)
+                return
+                
+            # Original message handling code...
             # Get the user's preferred model or use default
             model_name = user_model_preferences.get(chat_id, DEFAULT_MODEL)
             
@@ -202,6 +214,123 @@ async def word_command(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error generating word of the day: {e}")
         await update.message.reply_text(
             "Sorry, I encountered an error generating the word of the day. Please try again.",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+
+async def story_command(update: Update, context: CallbackContext) -> None:
+    """Initiate the story generation process"""
+    chat_id = update.effective_chat.id
+    
+    # Check if there's a prompt in the command
+    if context.args and len(context.args) > 0:
+        # If prompt is provided with command, start generation right away
+        prompt = ' '.join(context.args)
+        await generate_story_flow(update, context, prompt)
+    else:
+        # Ask for a prompt
+        await update.message.reply_text(
+            "Please provide a topic or prompt for your illustrated story. For example:\n"
+            "- A day at the beach\n"
+            "- An adventure in Amsterdam\n"
+            "- A mysterious package\n\n"
+            "Send your prompt now, or use /cancel to stop.",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        # Set conversation state
+        context.user_data['waiting_for_story_prompt'] = True
+
+async def cancel_command(update: Update, context: CallbackContext) -> None:
+    """Cancel the current operation"""
+    # Clear any waiting states
+    if 'waiting_for_story_prompt' in context.user_data:
+        del context.user_data['waiting_for_story_prompt']
+    
+    await update.message.reply_text(
+        "Operation cancelled.",
+        read_timeout=TELEGRAM_TIMEOUT,
+        write_timeout=TELEGRAM_TIMEOUT
+    )
+
+async def generate_story_flow(update: Update, context: CallbackContext, prompt: str) -> None:
+    """Generate an illustrated story based on the given prompt using DALL-E"""
+    chat_id = update.effective_chat.id
+    
+    # Get the user's preferred model
+    model_name = user_model_preferences.get(chat_id, DEFAULT_MODEL)
+    
+    # Show typing indicator
+    await context.bot.send_chat_action(
+        chat_id=chat_id,
+        action="typing"
+    )
+    
+    try:
+        # Send initial message
+        status_message = await context.bot.send_message(
+            chat_id=chat_id,
+            text="Generating your illustrated story... This may take a few minutes.",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        
+        # Generate the story with scenes
+        story_data = await story_generator.generate_story(
+            user_prompt=prompt,
+            model_name=model_name
+        )
+        
+        # Update status
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=status_message.message_id,
+            text=f"Story generated! Creating illustrations with DALL-E...",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        
+        # Create video with DALL-E illustrations
+        video_file = await story_generator.create_story_video(story_data)
+        
+        # Update status
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=status_message.message_id,
+            text=f"Illustrations complete! Sending your story now...",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        
+        # Send video file with caption
+        with open(video_file, 'rb') as f:
+            await context.bot.send_video(
+                chat_id=chat_id,
+                video=f,
+                caption=f"🎬 Illustrated Story: {story_data['title_nl']} / {story_data['title_en']}\n\nPrompt: {prompt}",
+                read_timeout=120,  # Longer timeout for video upload
+                write_timeout=120,
+                connect_timeout=120,
+                pool_timeout=120
+            )
+            
+        # Final confirmation
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=status_message.message_id,
+            text=f"✅ Your illustrated story has been delivered!",
+            read_timeout=TELEGRAM_TIMEOUT,
+            write_timeout=TELEGRAM_TIMEOUT
+        )
+        
+        # Clean up old files occasionally
+        story_generator.cleanup_old_files()
+        
+    except Exception as e:
+        logger.error(f"Error in story generation: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Sorry, I encountered an error generating your illustrated story: {str(e)}",
             read_timeout=TELEGRAM_TIMEOUT,
             write_timeout=TELEGRAM_TIMEOUT
         )
@@ -302,6 +431,10 @@ def setup_daily_word(application: Application):
         days=(0, 1, 2, 3, 4, 5, 6)  # All days of the week
     )
 
+def setup_story_generator():
+    global story_generator
+    story_generator = DalleStoryGenerator(llm_handler)
+
 def main():
     # Initialize the database
     db_manager.init_db()
@@ -310,11 +443,16 @@ def main():
 
     # Set up daily word feature
     setup_daily_word(app)
+    
+    # Set up story generator
+    setup_story_generator()
 
     # Command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("settings", settings_command))
     app.add_handler(CommandHandler("word", word_command))
+    app.add_handler(CommandHandler("story", story_command))  # Add the story command
+    app.add_handler(CommandHandler("cancel", cancel_command))  # Add the cancel command
     
     # Message and callback handlers
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
