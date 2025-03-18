@@ -4,3 +4,4 @@ __pycache__/
 *.pyo
 chat_history.db
 sqlite3.exe
+story_temp/
